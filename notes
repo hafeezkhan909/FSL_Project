@@ -1,0 +1,8 @@
+Order of tasks to be executed:
+
+1. networks/PRNet.py - in progress
+2. networks/layers.py - done
+3. data_process/data_process_func.py
+4. dataloaders/Position_dataloader.py
+5. train/prnet.py
+6. config
