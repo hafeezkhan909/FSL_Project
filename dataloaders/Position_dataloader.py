@@ -1,34 +1,38 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-import os
 import torch
-import numpy as np
-import torch.nn.functional as F
 from torch.utils.data import Dataset
-import random
 from data_process.data_process_func import *
 from multiprocessing import Pool, cpu_count
 
+def create_sample1(image_path, out_size):
+    """
+    Create a sample dictionary with image data loaded from a JPEG file.
 
-def create_sample(image_path, out_size):
-    image, spacing = load_nifty_volume_as_array(image_path, return_spacing=True)
-    image = image.astype(np.float16)
-    spacing = np.array(spacing).astype(np.float32)
-    spacing = spacing[:, np.newaxis, np.newaxis, np.newaxis]
+    Args:
+        image_path (str): Path to the JPEG image.
+        out_size (tuple): Desired output size as (height, width).
+
+    Returns:
+        dict: A dictionary containing the image tensor and additional information.
+    """
+    image = load_jpeg_image_as_array1(image_path)
+    image = image.astype(np.float32)
+
+    # If the image is grayscale, it will be 2D. If RGB, it will be 3D.
+    if len(image.shape) == 2:  # Grayscale
+        image = np.expand_dims(image, axis=-1)  # Add a channel dimension
+
     if out_size:
-        if image.shape[0] <= out_size[0] or image.shape[1] <= out_size[1] or image.shape[2] <= \
-                out_size[2]:
-            pw = max((out_size[0] - image.shape[0]) // 2 + 3, 0)
-            ph = max((out_size[1] - image.shape[1]) // 2 + 3, 0)
-            pd = max((out_size[2] - image.shape[2]) // 2 + 3, 0)
-            image = np.pad(image, [(pw, pw), (ph, ph), (pd, pd)], mode='constant', constant_values=0)
-    shape = list(image.shape)
-    sample = {'image': torch.from_numpy(image[np.newaxis]), 'spacing': torch.from_numpy(spacing),
-              'image_path': image_path}
+        if image.shape[0] <= out_size[0] or image.shape[1] <= out_size[1]:
+            ph = max((out_size[0] - image.shape[0]) // 2 + 3, 0)
+            pw = max((out_size[1] - image.shape[1]) // 2 + 3, 0)
+            image = np.pad(image, [(ph, ph), (pw, pw), (0, 0)], mode='constant', constant_values=0)
+
+    # Ensure the image has a batch dimension for PyTorch compatibility
+    image = np.expand_dims(image, axis=0)  # Add batch dimension
+    sample = {'image': torch.from_numpy(image), 'image_path': image_path}
     return sample
 
-
-class PositionDataloader(Dataset):
+class PositionDataloader1(Dataset):
     """ Dataset position """
 
     def __init__(self, config=None, image_name_list='train', num=None, transform=None,
@@ -49,7 +53,7 @@ class PositionDataloader(Dataset):
             # p = Pool(2)
             p = Pool(cpu_count())
             for image_name in self.image_name_list:
-                image_task_dic[image_name] = p.apply_async(create_sample, args=(image_name, out_size,))
+                image_task_dic[image_name] = p.apply_async(create_sample1, args=(image_name, out_size,))
             p.close()
             p.join()
             for image_name in image_task_dic.keys():
@@ -73,149 +77,158 @@ class PositionDataloader(Dataset):
                 image_name = random.sample(self.image_name_list, 1)[0]
             else:
                 image_name = self.image_name_list[idx]
-            sample = create_sample(image_name, self.out_size)
+            sample = create_sample1(image_name, self.out_size)
         if self.transform:
             sample = self.transform(sample)
         return sample
 
-
-class RandomDoubleCrop(object):
+class RandomDoubleCrop1(object):
     """
     Randomly crop several images in one sample;
-    distance is a vector(could be positive or pasitive), representing the vector
+    distance is a vector (could be positive or negative), representing the vector
     from image1 to image2.
     Args:
-    output_size (int): Desired output size
+    output_size (tuple): Desired output size (height, width)
     """
 
-    def __init__(self, output_size, foreground_only=True, small_move=False, fluct_range=[0, 0, 0]):
+    def __init__(self, output_size, foreground_only=True, small_move=False, fluct_range=[0, 0]):
         self.output_size = torch.tensor(output_size, dtype=torch.int16)
         self.img_pad = torch.div(self.output_size, 2, rounding_mode='trunc')
-        self.foregroung_only = foreground_only
-        self.fluct_range = fluct_range  # distance, mm
+        self.foreground_only = foreground_only
+        self.fluct_range = fluct_range  # distance, could be in pixels
         self.small_move = small_move
-        cor_x, cor_z, cor_y = np.meshgrid(np.arange(self.output_size[1]),
-                                          np.arange(self.output_size[0]),
-                                          np.arange(self.output_size[2]))
-        self.cor_grid = torch.from_numpy(np.concatenate((cor_z[np.newaxis], cor_x[np.newaxis], cor_y[np.newaxis]), axis=0))
+        # Only two dimensions are needed for 2D images
+        cor_x, cor_y = np.meshgrid(np.arange(self.output_size[1]),
+                                   np.arange(self.output_size[0]))
+        self.cor_grid = torch.from_numpy(np.concatenate((cor_x[np.newaxis],
+                                                         cor_y[np.newaxis]), axis=0))
 
-    def random_position(self, shape, initial_position=[0, 0, 0], spacing=[1, 1, 1], small_move=False):
+    def random_position(self, shape, initial_position=[0, 0], small_move=False):
         position = []
-        for i in range(len(shape)):
+        for i in range(len(shape)):  # This will now iterate twice (for x and y)
             if small_move:
-                position.append(random.randint(max(0, initial_position[i] - np.int(self.fluct_range[i] / spacing[i])), min(shape[i] - 1,
-                                                   initial_position[i] + np.int(self.fluct_range[i] / spacing[i]))))
+                # Calculate the position with consideration for small_move and fluct_range
+                pos_min = max(0, initial_position[i] - self.fluct_range[i])
+                pos_max = min(shape[i] - 1, initial_position[i] + self.fluct_range[i])
+                position.append(random.randint(pos_min, pos_max))
             else:
+                # Random position without small_move considerations
                 position.append(random.randint(0, shape[i] - 1))
-        return torch.tensor(position)
+        return torch.tensor(position, dtype=torch.int16)
 
     def __call__(self, sample):
-        image = sample['image']
+        image = sample['image']  # Assuming image is a numpy array.
         nsample = {}
         nsample['image_path'] = sample['image_path']
-        nsample['spacing'] = sample['spacing']
-        spacing = sample['spacing'].squeeze().numpy()
 
         background_chosen = True
-        shape_n = torch.tensor(image.shape[1::])
-        choose_num = 0
+        shape_n = image.shape  # Directly using numpy shape property.
         while background_chosen:
-            choose_num += 1
             random_pos0 = self.random_position(shape_n)
-            if image[0, random_pos0[0], random_pos0[1], random_pos0[2]] > 0.0001:
+            # Check if the randomly selected position is foreground if foreground_only is True.
+            if not self.foreground_only or image[random_pos0[1], random_pos0[0]] >= 45:
                 background_chosen = False
-        pad_size_ = [
-            torch.maximum(-random_pos0 + torch.div(self.output_size, 2, rounding_mode='trunc'), torch.tensor(0)).to(
-                torch.int16),
-            torch.maximum(random_pos0 + torch.div(self.output_size, 2, rounding_mode='trunc') - shape_n,
-                          torch.tensor(0)).to(torch.int16)]
-        pad_size = []
-        for i in range(3):
-            pad_size.append(pad_size_[0][2 - i])
-            pad_size.append(pad_size_[1][2 - i])
-        min_random_pos0 = torch.maximum(random_pos0 - torch.div(self.output_size, 2, rounding_mode='trunc'),
-                                        torch.tensor(0)).to(torch.int16)
-        max_random_pos0 = torch.minimum(random_pos0 + torch.div(self.output_size, 2, rounding_mode='trunc'),
-                                        shape_n).to(torch.int16)
-        nsample['random_crop_image_0'] = F.pad(image[:, min_random_pos0[0]:max_random_pos0[0],
-                                               min_random_pos0[1]:max_random_pos0[1],
-                                               min_random_pos0[2]:max_random_pos0[2]], pad=pad_size)
+
+        half_size = (self.output_size // 2).numpy()  # Assuming output_size is a tensor.
+        top_left = np.maximum(random_pos0 - half_size, 0)
+        bottom_right = np.minimum(random_pos0 + half_size, shape_n)
+
+        # Crop the image
+        cropped_image = image[top_left[1]:bottom_right[1], top_left[0]:bottom_right[0]]
+
+        # Calculate padding
+        pad_width = ((abs(min(0, top_left[1])), max(0, bottom_right[1] - shape_n[0])),
+                     (abs(min(0, top_left[0])), max(0, bottom_right[0] - shape_n[1])))
+
+        # Pad the image
+        padded_image = np.pad(cropped_image, pad_width, mode='constant', constant_values=0)
+        nsample['random_crop_image_0'] = padded_image
 
         nsample['random_position_0'] = random_pos0
-        nsample['random_fullsize_position_0'] = self.cor_grid + random_pos0.unsqueeze(dim=-1).unsqueeze(
-            dim=-1).unsqueeze(dim=-1)
+
+        # # Optional: Draw the square and midpoint on a copy of the image for visualization
+        # if 'draw_square' in self.__dir__():  # Check if draw_square method exists
+        #     vis_image = self.draw_square(image.copy(), random_pos0.numpy())
+        #     nsample['visualized_image'] = vis_image  # Store or save this image as needed
+
+        # Ensure random_pos0 is a tensor for this operation
+        random_pos0_tensor = torch.tensor(random_pos0, dtype=torch.float32).view(2, 1, 1)
+        nsample['random_fullsize_position_0'] = (self.cor_grid + random_pos0_tensor).numpy()
+
+        # 2nd Crop
 
         background_chosen = True
-        choose_num = 0
         while background_chosen:
-            choose_num += 1
-            random_pos1 = self.random_position(shape_n, nsample['random_position_0'], spacing, self.small_move)
-            if image[0, random_pos1[0], random_pos1[1], random_pos1[2]] > 0.0001:
+            random_pos1 = self.random_position(shape_n, nsample['random_position_0'], self.small_move)
+            # Check the condition for the selected pixel; if it's foreground, break the loop.
+            if not self.foregroung_only or image[random_pos1[0], random_pos1[1]] >= 45:
                 background_chosen = False
-        pad_size_ = [
-            torch.maximum(-random_pos1 + torch.div(self.output_size, 2, rounding_mode='trunc'), torch.tensor(0)).to(
-                torch.int16),
-            torch.maximum(random_pos1 + torch.div(self.output_size, 2, rounding_mode='trunc') - shape_n,
-                          torch.tensor(0)).to(torch.int16)]
-        pad_size = []
-        for i in range(3):
-            pad_size.append(pad_size_[0][2 - i])
-            pad_size.append(pad_size_[1][2 - i])
-        min_random_pos1 = torch.maximum(random_pos1 - torch.div(self.output_size, 2, rounding_mode='trunc'),
-                                        torch.tensor(0)).to(torch.int16)
-        max_random_pos1 = torch.minimum(random_pos1 + torch.div(self.output_size, 2, rounding_mode='trunc'),
-                                        shape_n).to(torch.int16)
-        nsample['random_crop_image_1'] = F.pad(image[:, min_random_pos1[0]:max_random_pos1[0],
-                                               min_random_pos1[1]:max_random_pos1[1],
-                                               min_random_pos1[2]:max_random_pos1[2]], pad=pad_size)
+
+        top_left1 = np.maximum(random_pos1 - half_size, 0)
+        bottom_right1 = np.minimum(random_pos1 + half_size, shape_n)
+
+        # Crop the image
+        cropped_image1 = image[top_left1[1]:bottom_right1[1], top_left1[0]:bottom_right1[0]]
+
+        # Calculate padding
+        pad_width1 = ((abs(min(0, top_left1[1])), max(0, bottom_right1[1] - shape_n[0])),
+                     (abs(min(0, top_left1[0])), max(0, bottom_right1[0] - shape_n[1])))
+
+        # Pad the image
+        padded_image1 = np.pad(cropped_image1, pad_width1, mode='constant', constant_values=0)
+        nsample['random_crop_image_1'] = padded_image1
+
         nsample['random_position_1'] = random_pos1
-        nsample['random_fullsize_position_1'] = self.cor_grid + random_pos1.unsqueeze(dim=-1).unsqueeze(
-            dim=-1).unsqueeze(dim=-1)
+
+        # # Optional: Draw the square and midpoint on a copy of the image for visualization
+        # if 'draw_square' in self.__dir__():  # Check if draw_square method exists
+        #     vis_image1 = self.draw_square(image.copy(), random_pos1.numpy())
+        #     nsample['visualized_image1'] = vis_image1  # Store or save this image as needed
+
+        # Ensure random_pos1 is a tensor for this operation
+        random_pos1_tensor = torch.tensor(random_pos1, dtype=torch.float32).view(2, 1, 1)
+        nsample['random_fullsize_position_1'] = (self.cor_grid + random_pos1_tensor).numpy()
+
         key_ls = list(nsample.keys())
         for key in key_ls:
             if torch.is_tensor(nsample[key]):
                 nsample[key] = nsample[key].to(torch.float32)
+
         return nsample
 
-
-class RandomDoubleMask(object):
+class RandomDoubleMask1(object):
     def __init__(self, max_round=1, include_0=['random_crop_image_0'], include_1=['random_crop_image_1'],
-                 mask_size=[0, 0, 0]):
+                 mask_size=[0, 0]):
         self.include_0 = include_0
         self.include_1 = include_1
         self.max_round = max_round
-        self.mask_size = mask_size
+        self.mask_size = mask_size  # Should now be [height, width]
 
     def __call__(self, sample):
         for include in self.include_0[0], self.include_1[0]:
-            max_round = np.random.randint(1, self.max_round)
+            max_round = np.random.randint(1, self.max_round + 1)
             sample[include.replace('random', 'random_mask')] = torch.clone(sample[include])
-            sample[include.replace('random_crop_image', 'random_mask')] = torch.zeros_like(
-                sample[include.replace('random', 'random_mask')])
             mask_image = sample[include].clone()
-            shape = mask_image.shape[1::]
+            shape = mask_image.shape[1:]  # Shape is now just height and width
+
             for _ in range(max_round):
                 min_cor = []
-                for i in range(3):
+                for i in range(2):  # Loop over 2 dimensions instead of 3
                     min_cor.append(np.random.randint(0, shape[i] - self.mask_size[i]))
-                sample[include.replace('random', 'random_mask')][min_cor[0]:min_cor[0] + self.mask_size[0],
-                min_cor[1]:min_cor[1] + self.mask_size[1], min_cor[2]:min_cor[2] + self.mask_size[2]] = 0
-                sample[include.replace('random_crop_image', 'random_mask')][min_cor[0]:min_cor[0] + self.mask_size[0],
-                min_cor[1]:min_cor[1] + self.mask_size[1], min_cor[2]:min_cor[2] + self.mask_size[2]] = 0
+
+                # Apply the mask
+                sample[include.replace('random', 'random_mask')][:,
+                min_cor[0]:min_cor[0] + self.mask_size[0], min_cor[1]:min_cor[1] + self.mask_size[1]] = 0
+
         return sample
 
-
-class ToPositionTensor(object):
-    """Convert ndarrays in sample to Tensors."""
+class ToPositionTensor1(object):
+    """Convert ndarrays in sample to Tensors for 2D images."""
 
     def __call__(self, sample):
-        shape = sample['random_fullsize_position_0'].shape
-        sample['random_position_0'] = sample['random_fullsize_position_0'][:, shape[0] // 2, shape[1] // 2,
-                                      shape[2] // 2]
-        sample['random_position_1'] = sample['random_fullsize_position_1'][:, shape[0] // 2, shape[1] // 2,
-                                      shape[2] // 2]
-        spacing = sample['spacing']
-        sample['rela_distance'] = (sample['random_position_0'] - sample['random_position_1']) * spacing.squeeze()
-        sample['rela_fullsize_distance'] = (sample['random_fullsize_position_0'] - sample[
-            'random_fullsize_position_1']) * spacing
+
+        sample['rela_distance'] = sample['random_position_0'] - sample['random_position_1']
+        sample['rela_fullsize_distance'] = (sample['random_fullsize_position_0'] - sample['random_fullsize_position_1'])
+
         return sample
+
