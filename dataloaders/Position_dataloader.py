@@ -14,12 +14,8 @@ def create_sample1(image_path, out_size):
     Returns:
         dict: A dictionary containing the image tensor and additional information.
     """
-    image = load_jpeg_image_as_array1(image_path)
+    image = load_png_image_as_array1(image_path)
     image = image.astype(np.float32)
-
-    # If the image is grayscale, it will be 2D. If RGB, it will be 3D.
-    if len(image.shape) == 2:  # Grayscale
-        image = np.expand_dims(image, axis=-1)  # Add a channel dimension
 
     if out_size:
         if image.shape[0] <= out_size[0] or image.shape[1] <= out_size[1]:
