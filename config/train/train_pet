@@ -1,0 +1,34 @@
+[data]
+train_image_path     = ../data/Reconstructed_Static_64_Frame.png
+iter_num              = 10
+batch_size            = 1
+patch_size            = [48, 48]
+distance_ratio        = [100, 100]
+
+[prnetwork]
+net_type                = PRNet
+base_feature_number     = 16
+drop_rate               = 0
+dilation                = 1
+class_num               = 1
+input_channel           = 1
+
+[training]
+load_weight        = False
+prnet_load_path     = ../weights/PRNet/
+learning_rate      = 1e-4
+decay              = 1e-4
+maximal_epoch      = 10
+snapshot_epoch     = 10
+num_workers        = 1
+small_move         = False
+fluct_range        = [50, 50]
+start_iteration    = 0
+train_step         = 1
+test_step          = 1
+test_iter          = 10
+print_step         = 40
+random_seed        = 133
+prnet_save_name  = ../weights/PRNet_Pilot
+best_loss          = 1000
+model_save_dir     = ../weights/checkpoints/
