@@ -9,7 +9,7 @@ def create_sample1(image_path):
 
     image = load_png_image_as_array1(image_path)
     image = image.astype(np.float32)
-
+    # image /= 255
     # Ensure the image has a batch dimension for PyTorch compatibility
     image = np.expand_dims(image, axis=0)  # Add channel dimension
     sample = {'image': torch.from_numpy(image), 'image_path': image_path}
@@ -73,7 +73,7 @@ class RandomDoubleCrop1(object):
                 # Random position without small_move considerations
                 # print(shape[i])
                 position.append(random.randint(0, shape[i] - 1))
-        print(position)
+        # print(position)
         return torch.tensor(position, dtype=torch.int16)
 
     def __call__(self, sample):
@@ -82,10 +82,10 @@ class RandomDoubleCrop1(object):
         nsample['image_path'] = sample['image_path']
         copied_image = image.numpy()
         copied_image = np.squeeze(copied_image)
-        print(copied_image.shape)
-        print(type(copied_image))
-        cv2.imshow("Image", copied_image)
-        cv2.waitKey(0)
+        # print(copied_image.shape)
+        # print(type(copied_image))
+        # cv2.imshow("Image", copied_image)
+        # cv2.waitKey(0)
         background_chosen = True
         shape_n = image.shape  # Directly using numpy shape property.
         # print("This is the shape being used", shape_n)
@@ -117,9 +117,9 @@ class RandomDoubleCrop1(object):
 
         # print("Cropped image 0 shape: ", padded_image.shape)
         nsample['random_crop_image_0'] = padded_image
-        padded_image_for_display = np.squeeze(padded_image)
-        cv2.imshow('Cropped Image', padded_image_for_display)
-        cv2.waitKey(1000)
+        # padded_image_for_display = np.squeeze(padded_image)
+        # cv2.imshow('Cropped Image', padded_image_for_display)
+        # cv2.waitKey(1000)
         nsample['random_position_0'] = random_pos0
 
         # # Optional: Draw the square and midpoint on a copy of the image for visualization
@@ -188,4 +188,3 @@ class ToPositionTensor1(object):
         # sample['rela_fullsize_distance'] = (sample['random_fullsize_position_0'] - sample['random_fullsize_position_1'])
 
         return sample
-

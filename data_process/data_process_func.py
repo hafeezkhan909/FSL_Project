@@ -24,7 +24,7 @@ def read_file_list(filename, prefix=None, suffix=None):
 def load_png_image_as_array1(filename):
     # Load the image using OpenCV in grayscale
     img = cv2.imread(filename, cv2.IMREAD_GRAYSCALE)
-    print(img.shape)
+    # print(img.shape)
     # resized_image = cv2.resize(img, (1214, 256))
 
     return img
