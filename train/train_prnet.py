@@ -98,7 +98,7 @@ def train(config_file):
                               os.path.join(output_dir2, f'img_batch0_epoch_{epoch}_batch_{i_batch}.png'),
                               normalize=False)
 
-            ae_train_loss = loss_func(predic_ae_0, img_batch0) + loss_func(predic_ae_1, img_batch1)
+            ae_train_loss = loss_func(predic_ae_0, image1) + loss_func(predic_ae_1, image2)
             fc_predic = dis_ratio * torch.tanh(predic_cor_fc_0 - predic_cor_fc_1)
             fc_train_loss = loss_func(fc_predic, rela_distance_batch)
             train_loss = ae_train_loss + fc_train_loss
