@@ -1,8 +1,9 @@
+import numpy as np
 import torch
 from torch.utils.data import Dataset
 from data_process.data_process_func import *
-from multiprocessing import Pool, cpu_count
 import random
+import cv2
 
 def create_sample1(image_path):
 
@@ -18,7 +19,7 @@ def create_sample1(image_path):
 class PositionDataloader1(Dataset):
     """Dataset position"""
 
-    def __init__(self, config=None, image_path='../data/Reconstructed_Static_64_Frame.png', transform=None,
+    def __init__(self, config=None, image_path='../data/Resized_Reconstructed_Static_64_Frame.png', transform=None,
                  random_sample=True, out_size=None):
         self._iternum = config['iter_num']
         self.out_size = out_size
@@ -72,20 +73,27 @@ class RandomDoubleCrop1(object):
                 # Random position without small_move considerations
                 # print(shape[i])
                 position.append(random.randint(0, shape[i] - 1))
+        print(position)
         return torch.tensor(position, dtype=torch.int16)
 
     def __call__(self, sample):
         image = sample['image']  # Assuming image is a numpy array.
         nsample = {}
         nsample['image_path'] = sample['image_path']
-
+        copied_image = image.numpy()
+        copied_image = np.squeeze(copied_image)
+        print(copied_image.shape)
+        print(type(copied_image))
+        cv2.imshow("Image", copied_image)
+        cv2.waitKey(0)
         background_chosen = True
         shape_n = image.shape  # Directly using numpy shape property.
         # print("This is the shape being used", shape_n)
+        random_pos0 = []
         while background_chosen:
             random_pos0 = self.random_position(shape_n)
             # Check if the randomly selected position is foreground if foreground_only is True.
-            if not self.foreground_only or image[0, random_pos0[0], random_pos0[1]] >= 45:
+            if not self.foreground_only or image[0, random_pos0[0], random_pos0[1]] >= 30:
                 background_chosen = False
 
         half_size = np.array(self.output_size) // 2  # Assuming output_size is a tensor.
@@ -109,7 +117,9 @@ class RandomDoubleCrop1(object):
 
         # print("Cropped image 0 shape: ", padded_image.shape)
         nsample['random_crop_image_0'] = padded_image
-
+        padded_image_for_display = np.squeeze(padded_image)
+        cv2.imshow('Cropped Image', padded_image_for_display)
+        cv2.waitKey(1000)
         nsample['random_position_0'] = random_pos0
 
         # # Optional: Draw the square and midpoint on a copy of the image for visualization
@@ -124,10 +134,11 @@ class RandomDoubleCrop1(object):
         # 2nd Crop
 
         background_chosen = True
+        random_pos1 = []
         while background_chosen:
             random_pos1 = self.random_position(shape_n, nsample['random_position_0'], self.small_move)
             # Check the condition for the selected pixel; if it's foreground, break the loop.
-            if not self.foreground_only or image[0, random_pos1[0], random_pos1[1]] >= 45:
+            if not self.foreground_only or image[0, random_pos1[0], random_pos1[1]] >= 15:
                 background_chosen = False
 
         top_left1 = np.maximum(random_pos1 - half_size, [0, 0])

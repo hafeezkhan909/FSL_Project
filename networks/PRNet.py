@@ -1,7 +1,6 @@
 from __future__ import print_function
 import torch as t
 import torch.nn as nn
-import torch.nn.functional as F
 from networks.layers import SingleConv2D
 import math
 import numpy as np

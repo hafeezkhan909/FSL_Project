@@ -21,18 +21,15 @@ def read_file_list(filename, prefix=None, suffix=None):
         filelist = [f + suffix for f in filelist]
     return filelist
 
-def load_png_image_as_array1(filename, return_size=False):
+def load_png_image_as_array1(filename):
     # Load the image using OpenCV in grayscale
     img = cv2.imread(filename, cv2.IMREAD_GRAYSCALE)
+    print(img.shape)
+    # resized_image = cv2.resize(img, (1214, 256))
 
-    resized_image = cv2.resize(img, (1214, 256))
+    return img
 
-    # Convert the cropped image to a numpy array
-    data = np.array(resized_image)
-    # print(data.shape)  # Print the shape of the data array
-
-    # Optionally return the size of the image
-    if return_size:
-        return data, resized_image.shape  # cropped_img.shape gives the height and width
-    else:
-        return data
+# size = load_png_image_as_array1('../data/Resized_Reconstructed_Static_64_Frame.png')
+# print(size.shape)
+# cv2.imshow("Image", size)
+# cv2.waitKey(0)

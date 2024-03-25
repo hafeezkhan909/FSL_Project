@@ -1,5 +1,5 @@
 [data]
-train_image_path     = ../data/Reconstructed_Static_64_Frame.png
+train_image_path     = ../data/Resized_Reconstructed_Static_64_Frame.png
 iter_num              = 10
 batch_size            = 1
 patch_size            = [48, 48]

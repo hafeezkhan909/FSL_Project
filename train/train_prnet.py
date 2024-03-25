@@ -12,7 +12,8 @@ from networks.NetFactory import NetFactory
 import numpy as np
 import argparse
 from dataloaders.Position_dataloader import PositionDataloader1, RandomDoubleCrop1, ToPositionTensor1
-
+import torchvision.utils as vutils
+import cv2
 def train(config_file):
     # Load configuration parameters
     writer = SummaryWriter()
@@ -61,6 +62,11 @@ def train(config_file):
     print('Start to train')
     start_it = config_train.get('start_iteration', 0)
     print_iter = 0
+    output_dir1 = '../data/predicted_images'
+    os.makedirs(output_dir1, exist_ok=True)
+
+    output_dir2 = '../data/real_images'
+    os.makedirs(output_dir2, exist_ok=True)
     # Training loop
     for epoch in range(start_it, config_train['maximal_epoch']):
         print('#######epoch:', epoch)
@@ -79,8 +85,22 @@ def train(config_file):
             predic_0 = prnet(img_batch0)
             predic_1 = prnet(img_batch1)
             predic_ae_0, predic_cor_fc_0 = torch.sigmoid(predic_0['ae']), predic_0['fc_position']
+            # print(predic_ae_0)
+            # print(predic_ae_0.shape)
             predic_ae_1, predic_cor_fc_1 = torch.sigmoid(predic_1['ae']), predic_1['fc_position']
-            ae_train_loss = loss_func(predic_ae_0, img_batch0) + loss_func(predic_ae_1, img_batch1)
+
+            img_batch0_normalized = img_batch0 / 255.0
+            img_batch1_normalized = img_batch1 / 255.0
+
+            vutils.save_image(predic_ae_0.data,
+                              os.path.join(output_dir1, f'predic_ae_0_epoch_{epoch}_batch_{i_batch}.png'),
+                              normalize=True)
+
+            vutils.save_image(img_batch0.data,
+                              os.path.join(output_dir2, f'img_batch0_epoch_{epoch}_batch_{i_batch}.png'),
+                              normalize=False)
+
+            ae_train_loss = loss_func(predic_ae_0, img_batch0_normalized) + loss_func(predic_ae_1, img_batch1_normalized)
             fc_predic = dis_ratio * torch.tanh(predic_cor_fc_0 - predic_cor_fc_1)
             fc_train_loss = loss_func(fc_predic, rela_distance_batch)
             train_loss = ae_train_loss + fc_train_loss
